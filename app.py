@@ -1,6 +1,8 @@
-from flask import Flask
+from flask import Flask, send_file
 import requests
 from datetime import datetime
+import os
+from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 
 app = Flask(__name__)
 
@@ -21,11 +23,64 @@ def post_time():
     except Exception as e:
         return f"⚠️ Lỗi kết nối: {e}"
 
+def createVideo():
+    # ====== Cấu hình đầu vào ======
+    IMAGE_FOLDER = "images"        # thư mục chứa ảnh
+    AUDIO_PATH = "output.mp3"      # file giọng đọc
+    OUTPUT_PATH = "output_video.mp4"
+
+    # ====== Nạp âm thanh ======
+    audio = AudioFileClip(AUDIO_PATH)
+    audio_duration = audio.duration  # thời lượng âm thanh (giây)
+
+    # ====== Đọc danh sách ảnh từ thư mục ======
+    image_files = sorted([
+        os.path.join(IMAGE_FOLDER, f)
+        for f in os.listdir(IMAGE_FOLDER)
+        if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+    ])
+
+    if not image_files:
+        raise ValueError("❌ Không tìm thấy ảnh trong thư mục 'images'!")
+
+    # ====== Tính thời lượng mỗi ảnh ======
+    duration_per_image = audio_duration / len(image_files)
+
+    # ====== Tạo danh sách ImageClip ======
+    clips = [
+        ImageClip(img).set_duration(duration_per_image)
+        for img in image_files
+    ]
+
+    # ====== Ghép các ảnh thành một video ======
+    video = concatenate_videoclips(clips, method="compose")
+
+    # ====== Gắn âm thanh vào video ======
+    final = video.set_audio(audio)
+
+    # ====== Xuất video ======
+    final.write_videofile(
+        OUTPUT_PATH,
+        fps=24,
+        codec="libx264",
+        audio_codec="aac",
+        threads=2,
+        preset="ultrafast"   # nhanh, nhẹ
+    )
+
 @app.route("/")
 def home():
     """Khi truy cập URL thì gửi dữ liệu luôn"""
     result = post_time()
     return result
+
+@app.route("/taovideo")
+def create():
+    return f"Đã tạo video"
+
+@app.route("/view")
+def view():
+    return send_file("output_video.mp4", mimetype="video/mp4")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
