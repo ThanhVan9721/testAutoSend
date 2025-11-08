@@ -76,6 +76,7 @@ def home():
 
 @app.route("/taovideo")
 def create():
+    createVideo()
     return f"Đã tạo video"
 
 @app.route("/view")
