@@ -248,18 +248,16 @@ def check_ffmpeg_installed():
     try:
         result = subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result.returncode == 0:
-            print("✅ FFmpeg đã được cài đặt!")
-            return True
+            return "✅ FFmpeg đã được cài đặt!"
         else:
-            print("⚠️ FFmpeg chưa sẵn sàng (trả về lỗi).")
-            return False
+            return "⚠️ FFmpeg chưa sẵn sàng (trả về lỗi)."
     except FileNotFoundError:
-        print("❌ FFmpeg chưa được cài đặt trên hệ thống.")
-        return False
+        return "❌ FFmpeg chưa được cài đặt trên hệ thống."
 
 @app.route("/")
 def home():
-    check_ffmpeg_installed()
+
+    return check_ffmpeg_installed()
     # content = getNewPost24h()
     # contentEdit = editContent(content)
     # asyncio.run(tts(contentEdit))
