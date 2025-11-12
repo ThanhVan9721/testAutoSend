@@ -12,6 +12,7 @@ import edge_tts
 import hashlib
 import shutil
 import subprocess
+import io
 app = Flask(__name__)
 
 def createVideo():
@@ -76,31 +77,58 @@ def getNewPost24h():
     os.makedirs(save_folder)
 
     # ====== Hàm tải ảnh ======
-    def download_image(url, prefix="img"):
+    def download_image(url, prefix="img", width=1080, height=1920):
         try:
             if not url or not url.startswith("http"):
                 return None
 
-            ext = os.path.splitext(url.split("?")[0])[-1]
-            if ext.lower() not in [".jpg", ".jpeg", ".png", ".webp"]:
+            # Lấy phần mở rộng file
+            ext = os.path.splitext(url.split("?")[0])[-1].lower()
+            if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
                 ext = ".jpg"
+
+            # Tạo tên file duy nhất
             filename = f"{prefix}_{hashlib.md5(url.encode()).hexdigest()[:10]}{ext}"
             filepath = os.path.join(save_folder, filename)
 
+            # Nếu ảnh đã tồn tại thì bỏ qua
             if os.path.exists(filepath):
                 return filepath
 
+            # Tải ảnh vào bộ nhớ (Bytes)
             response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                with open(filepath, "wb") as f:
-                    f.write(response.content)
-                print(f"✅ Đã tải: {filename}")
-                return filepath
-            else:
+            if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
+
+            # Dùng FFmpeg để resize, căn giữa + thêm nền đen
+            # force_original_aspect_ratio=decrease -> giữ nguyên tỉ lệ ảnh
+            # pad -> thêm viền đen cho đủ khung TikTok 1080x1920
+            img_bytes = io.BytesIO(response.content)
+            cmd = [
+                "ffmpeg", "-y",                  # Ghi đè file nếu có
+                "-i", "pipe:0",                  # Nhận ảnh từ stdin (bộ nhớ)
+                "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+                filepath
+            ]
+
+            subprocess.run(
+                cmd,
+                input=img_bytes.read(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            if os.path.exists(filepath):
+                print(f"✅ Đã tải và resize (FFmpeg): {filename}")
+                return filepath
+            else:
+                print(f"⚠️ FFmpeg không tạo được file: {filename}")
+                return None
+
         except Exception as e:
-            print(f"❌ Lỗi khi tải ảnh {url}: {e}")
+            print(f"❌ Lỗi khi xử lý ảnh {url}: {e}")
             return None
 
 
@@ -244,25 +272,14 @@ async def tts(text):
     await tts.save("output.mp3")
     print("End chuyển văn bản thành giọng nói")
 
-def check_ffmpeg_installed():
-    try:
-        result = subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode == 0:
-            return "✅ FFmpeg đã được cài đặt!"
-        else:
-            return "⚠️ FFmpeg chưa sẵn sàng (trả về lỗi)."
-    except FileNotFoundError:
-        return "❌ FFmpeg chưa được cài đặt trên hệ thống."
 
 @app.route("/")
 def home():
-
-    return check_ffmpeg_installed()
-    # content = getNewPost24h()
-    # contentEdit = editContent(content)
-    # asyncio.run(tts(contentEdit))
-    # createVideo()
-    # return "Tạo thành công"
+    content = getNewPost24h()
+    contentEdit = editContent(content)
+    asyncio.run(tts(contentEdit))
+    createVideo()
+    return "Tạo thành công"
 
 @app.route("/taovideo")
 def create():
