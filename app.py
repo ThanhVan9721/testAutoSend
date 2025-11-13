@@ -13,53 +13,70 @@ import hashlib
 import shutil
 import subprocess
 import io
+import glob
+import json
 app = Flask(__name__)
 
 def createVideo():
     print("Start Tạo video")
-    # ====== Cấu hình đầu vào ======
-    IMAGE_FOLDER = "images"        # thư mục chứa ảnh
-    AUDIO_PATH = "output.mp3"      # file giọng đọc
+    IMAGE_FOLDER = "images"
+    AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
 
-    # ====== Nạp âm thanh ======
-    audio = AudioFileClip(AUDIO_PATH)
-    audio_duration = audio.duration  # thời lượng âm thanh (giây)
+    # ===== Lấy danh sách ảnh =====
+    images = sorted(glob.glob(os.path.join(IMAGE_FOLDER, "*")), key=os.path.getctime)
+    if not images:
+        raise ValueError("⚠️ Không tìm thấy hình ảnh nào trong thư mục images!")
 
-    # ====== Đọc danh sách ảnh từ thư mục ======
-    image_files = sorted([
-        os.path.join(IMAGE_FOLDER, f)
-        for f in os.listdir(IMAGE_FOLDER)
-        if f.lower().endswith(('.jpg', '.jpeg', '.png'))
-    ])
-
-    if not image_files:
-        raise ValueError("❌ Không tìm thấy ảnh trong thư mục 'images'!")
-
-    # ====== Tính thời lượng mỗi ảnh ======
-    duration_per_image = audio_duration / len(image_files)
-
-    # ====== Tạo danh sách ImageClip ======
-    clips = [
-        ImageClip(img).set_duration(duration_per_image)
-        for img in image_files
+    # ===== Lấy độ dài âm thanh =====
+    cmd_probe = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "json", AUDIO_PATH
     ]
+    result = subprocess.run(cmd_probe, capture_output=True, text=True, check=True)
+    duration = float(json.loads(result.stdout)["format"]["duration"])
 
-    # ====== Ghép các ảnh thành một video ======
-    video = concatenate_videoclips(clips, method="compose")
+    # ===== Tính thời lượng mỗi ảnh =====
+    DURATION_PER_IMAGE = duration / len(images)
+    print(f"🎵 Âm thanh dài {duration:.2f}s → mỗi ảnh {DURATION_PER_IMAGE:.2f}s")
 
-    # ====== Gắn âm thanh vào video ======
-    final = video.set_audio(audio)
+    # ===== Tạo list.txt =====
+    list_file = "list.txt"
+    with open(list_file, "w", encoding="utf-8") as f:
+        for img in images:
+            f.write(f"file '{img}'\n")
+            f.write(f"duration {DURATION_PER_IMAGE}\n")
+        f.write(f"file '{images[-1]}'\n")
 
-    # ====== Xuất video ======
-    final.write_videofile(
-        OUTPUT_PATH,
-        fps=24,
-        codec="libx264",
-        audio_codec="aac",
-        threads=2,
-        preset="ultrafast"
-    )
+    # ===== Tạo video từ ảnh =====
+    temp_video = "temp_video.mp4"
+    cmd_video = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", list_file,
+        "-r", "30",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
+        "-c:v", "libx264",
+        temp_video
+    ]
+    subprocess.run(cmd_video, check=True)
+
+    # ===== Ghép video + âm thanh =====
+    cmd_merge = [
+        "ffmpeg", "-y",
+        "-i", temp_video,
+        "-i", AUDIO_PATH,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        OUTPUT_PATH
+    ]
+    subprocess.run(cmd_merge, check=True)
+
+    os.remove(temp_video)
+    os.remove(list_file)
     print("End Tạo video")
 
 def getNewPost24h():
@@ -280,11 +297,6 @@ def home():
     asyncio.run(tts(contentEdit))
     createVideo()
     return "Tạo thành công"
-
-@app.route("/taovideo")
-def create():
-    createVideo()
-    return f"Đã tạo video"
 
 @app.route("/view")
 def view():
