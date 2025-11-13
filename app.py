@@ -94,10 +94,12 @@ async def getNewPost24h():
     os.makedirs(save_folder)
 
     # ====== Hàm tải ảnh ======
-    def download_image(url, prefix="img", width=1080, height=1920):
+    def download_image(url, prefix="img", width=1080, height=1920, save_folder="images"):
         try:
             if not url or not url.startswith("http"):
                 return None
+
+            os.makedirs(save_folder, exist_ok=True)
 
             # Lấy phần mở rộng file
             ext = os.path.splitext(url.split("?")[0])[-1].lower()
@@ -112,29 +114,42 @@ async def getNewPost24h():
             if os.path.exists(filepath):
                 return filepath
 
-            # Tải ảnh vào bộ nhớ (Bytes)
+            # ===== Tải ảnh vào bộ nhớ =====
             response = requests.get(url, timeout=10)
             if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
 
-            # Dùng FFmpeg để resize, căn giữa + thêm nền đen
-            # force_original_aspect_ratio=decrease -> giữ nguyên tỉ lệ ảnh
-            # pad -> thêm viền đen cho đủ khung TikTok 1080x1920
             img_bytes = io.BytesIO(response.content)
+
+            # ===== Xác định codec đầu vào =====
+            if ext in [".jpg", ".jpeg"]:
+                codec = "mjpeg"
+            elif ext == ".png":
+                codec = "png"
+            elif ext == ".webp":
+                codec = "webp"
+            else:
+                codec = "mjpeg"
+
+            # ===== FFmpeg resize + căn giữa =====
             cmd = [
-                "ffmpeg", "-y",                  # Ghi đè file nếu có
-                "-i", "pipe:0",                  # Nhận ảnh từ stdin (bộ nhớ)
+                "ffmpeg", "-y",
+                "-f", "image2pipe",       # đọc ảnh từ stdin
+                "-vcodec", codec,         # định dạng ảnh
+                "-i", "pipe:0",           # stdin
                 "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+                "-frames:v", "1",         # chỉ xuất 1 frame
                 filepath
             ]
 
             subprocess.run(
                 cmd,
                 input=img_bytes.read(),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True
             )
 
             if os.path.exists(filepath):
@@ -144,6 +159,9 @@ async def getNewPost24h():
                 print(f"⚠️ FFmpeg không tạo được file: {filename}")
                 return None
 
+        except subprocess.CalledProcessError as e:
+            print(f"❌ FFmpeg lỗi khi xử lý {url}:\n{e.stderr.decode(errors='ignore')}")
+            return None
         except Exception as e:
             print(f"❌ Lỗi khi xử lý ảnh {url}: {e}")
             return None
@@ -295,7 +313,7 @@ def home():
     content = asyncio.run(getNewPost24h())
     contentEdit = asyncio.run(editContent(content))
     asyncio.run(tts(contentEdit))
-    createVideo()
+    asyncio.run(createVideo())
     return "Tạo thành công"
 
 @app.route("/view")
