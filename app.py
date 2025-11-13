@@ -79,110 +79,73 @@ async def createVideo():
 
 async def getNewPost24h():
     print("Start lấy bài viết mới")
-    # ====== Cấu hình ======
     rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
     google_script_url = 'https://script.google.com/macros/s/AKfycbzpFYZwnJXnOSkoimpjUJzSuz3xH88Tfn9t9-BNjvfb4H1SXQ8XzfLjgr0dWFHoe8Zt/exec'
     save_folder = "images"
 
-    # ====== Xóa thư mục ảnh cũ nếu có ======
     if os.path.exists(save_folder):
         shutil.rmtree(save_folder)
         print(f"🧹 Đã xóa thư mục cũ: {save_folder}")
-        
     os.makedirs(save_folder)
 
-    # ====== Hàm tải ảnh ======
+    # --- Hàm tải ảnh ---
     def download_image(url, prefix="img", width=1080, height=1920, save_folder="images"):
         try:
             if not url or not url.startswith("http"):
                 return None
-
             os.makedirs(save_folder, exist_ok=True)
-
-            # Lấy phần mở rộng file
             ext = os.path.splitext(url.split("?")[0])[-1].lower()
             if ext not in [".jpg", ".jpeg", ".png", ".webp"]:
                 ext = ".jpg"
-
-            # Tạo tên file duy nhất
             filename = f"{prefix}_{hashlib.md5(url.encode()).hexdigest()[:10]}{ext}"
             filepath = os.path.join(save_folder, filename)
-
-            # Nếu ảnh đã tồn tại thì bỏ qua
             if os.path.exists(filepath):
                 return filepath
-
-            # ===== Tải ảnh vào bộ nhớ =====
             response = requests.get(url, timeout=10)
             if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
-
             img_bytes = io.BytesIO(response.content)
-
-            # ===== Xác định codec đầu vào =====
-            if ext in [".jpg", ".jpeg"]:
-                codec = "mjpeg"
-            elif ext == ".png":
-                codec = "png"
-            elif ext == ".webp":
-                codec = "webp"
-            else:
-                codec = "mjpeg"
-
-            # ===== FFmpeg resize + căn giữa =====
+            codec = "mjpeg" if ext in [".jpg", ".jpeg"] else ext.replace(".", "")
             cmd = [
-                "ffmpeg", "-y",
-                "-f", "image2pipe",       # đọc ảnh từ stdin
-                "-vcodec", codec,         # định dạng ảnh
-                "-i", "pipe:0",           # stdin
+                "ffmpeg", "-y", "-f", "image2pipe", "-vcodec", codec, "-i", "pipe:0",
                 "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
-                "-frames:v", "1",         # chỉ xuất 1 frame
-                filepath
+                       f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+                "-frames:v", "1", filepath
             ]
-
-            subprocess.run(
-                cmd,
-                input=img_bytes.read(),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True
-            )
-
+            subprocess.run(cmd, input=img_bytes.read(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             if os.path.exists(filepath):
                 print(f"✅ Đã tải và resize (FFmpeg): {filename}")
                 return filepath
-            else:
-                print(f"⚠️ FFmpeg không tạo được file: {filename}")
-                return None
-
         except subprocess.CalledProcessError as e:
             print(f"❌ FFmpeg lỗi khi xử lý {url}:\n{e.stderr.decode(errors='ignore')}")
-            return None
         except Exception as e:
             print(f"❌ Lỗi khi xử lý ảnh {url}: {e}")
-            return None
+        return None
 
-
-    # ====== Lấy dữ liệu đã có trên Google Sheet ======
+    # --- Lấy dữ liệu Google Sheet ---
     r = requests.get(google_script_url)
-    dataInFiles = r.json()
-    titles_in_sheet = [x["title"] for x in dataInFiles]
+    try:
+        dataInFiles = r.json()
+        if not isinstance(dataInFiles, list):
+            print("⚠️ Dữ liệu trả về không phải dạng list JSON, đặt giá trị mặc định rỗng.")
+            dataInFiles = []
+    except Exception as e:
+        print(f"⚠️ Không thể parse JSON từ Google Script: {e}")
+        print("Phản hồi thực tế:", r.text[:500])
+        dataInFiles = []
 
+    titles_in_sheet = [x.get("title", "") for x in dataInFiles]
 
-    # ====== Đọc RSS và xử lý từng bài ======
+    # --- Đọc RSS ---
     feed = feedparser.parse(rss_url)
     contentNewPost = ""
     for entry in feed.entries:
         title = entry.title
         link = entry.link
-
-        # Nếu bài viết đã tồn tại thì bỏ qua ngay
         if title in titles_in_sheet:
             continue
 
-        # ===== Lấy ảnh chính từ RSS =====
         image_url = None
         if 'media_content' in entry and len(entry.media_content) > 0:
             image_url = entry.media_content[0]['url']
@@ -191,13 +154,11 @@ async def getNewPost24h():
             if match:
                 image_url = match.group(1)
 
-        # ===== Lấy nội dung chi tiết =====
         try:
             response = requests.get(link, timeout=10)
             response.encoding = "utf-8"
             soup = BeautifulSoup(response.text, "html.parser")
             article_tag = soup.find("article")
-
             if article_tag:
                 for tag in article_tag(["script", "style", "iframe", "figure", "div"]):
                     tag.decompose()
@@ -207,20 +168,23 @@ async def getNewPost24h():
         except Exception as e:
             content_text = f"Lỗi khi tải nội dung: {e}"
 
-        # ===== Gửi dữ liệu lên Google Sheet =====
         newData = {
             "title": title,
             "link": link,
             "image": image_url,
             "content": content_text
         }
+
         contentNewPost = content_text
-        response = requests.post(google_script_url, json=newData)
+        try:
+            response = requests.post(google_script_url, json=newData)
+            print("📤 Gửi dữ liệu lên Google Sheet:", response.status_code)
+        except Exception as e:
+            print(f"⚠️ Lỗi khi gửi dữ liệu lên Google Sheet: {e}")
 
         try:
             if image_url:
                 download_image(image_url, prefix="main")
-
             if article_tag:
                 for img_tag in article_tag.find_all("img"):
                     img_src = img_tag.get("src")
@@ -232,6 +196,7 @@ async def getNewPost24h():
         break
     print("End lấy bài viết mới")
     return contentNewPost
+
 
         
 
