@@ -1,8 +1,6 @@
 from flask import Flask, send_file
 import requests
-from datetime import datetime
 import os
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
 from openai import OpenAI
 import feedparser
 from bs4 import BeautifulSoup
