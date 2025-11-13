@@ -17,7 +17,7 @@ import glob
 import json
 app = Flask(__name__)
 
-def createVideo():
+async def createVideo():
     print("Start Tạo video")
     IMAGE_FOLDER = "images"
     AUDIO_PATH = "output.mp3"
@@ -79,7 +79,7 @@ def createVideo():
     os.remove(list_file)
     print("End Tạo video")
 
-def getNewPost24h():
+async def getNewPost24h():
     print("Start lấy bài viết mới")
     # ====== Cấu hình ======
     rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
@@ -219,7 +219,7 @@ def getNewPost24h():
 
         
 
-def editContent(content):
+async def editContent(content):
     print("Start edit nội dung bài viết")
     client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -292,8 +292,8 @@ async def tts(text):
 
 @app.route("/")
 def home():
-    content = getNewPost24h()
-    contentEdit = editContent(content)
+    content = asyncio.run(getNewPost24h())
+    contentEdit = asyncio.run(editContent(content))
     asyncio.run(tts(contentEdit))
     createVideo()
     return "Tạo thành công"
