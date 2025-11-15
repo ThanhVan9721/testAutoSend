@@ -32,25 +32,22 @@ async def createVideo():
     AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
 
+    # ===== Kiểm tra thư mục images tồn tại =====
+    if not os.path.exists(IMAGE_FOLDER):
+        raise ValueError(f"Thư mục {IMAGE_FOLDER} không tồn tại trên Render!")
+
     # ===== Lấy ảnh mọi định dạng =====
     images = []
     for ext in ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]:
         images.extend(glob.glob(os.path.join(IMAGE_FOLDER, ext)))
 
-    # ===== Sort theo thời gian =====
     images = sorted(images, key=os.path.getctime)
 
     if not images:
         raise ValueError("Không tìm thấy ảnh!")
 
     # ===== Lọc ảnh lỗi =====
-    valid_images = []
-    for img in images:
-        if is_valid_image(img):
-            valid_images.append(img)
-        else:
-            print(f"⚠ Bỏ qua ảnh lỗi: {img}")
-
+    valid_images = [img for img in images if is_valid_image(img)]
     if not valid_images:
         raise ValueError("Tất cả ảnh đều lỗi – FFmpeg không thể đọc!")
 
@@ -60,38 +57,39 @@ async def createVideo():
         capture_output=True, text=True
     )
     duration = float(json.loads(probe.stdout)["format"]["duration"])
-
     per_image = duration / len(valid_images)
 
-    with open("list.txt", "w", encoding="utf-8") as f:
+    # ===== Tạo list.txt đúng thư mục CWD =====
+    list_path = os.path.join(os.getcwd(), "list.txt")
+    with open(list_path, "w", encoding="utf-8") as f:
         for img in valid_images:
-            # Chỉ lấy folder + tên file, không dùng full path
-            relative_path = img.replace("\\", "/")  # đảm bảo dấu '/'
-            f.write(f"file '{relative_path}'\n")
+            # Chỉ lấy đường dẫn tương đối từ CWD
+            rel_path = os.path.relpath(img, os.getcwd()).replace("\\", "/")
+            f.write(f"file '{rel_path}'\n")
             f.write(f"duration {per_image}\n")
-
         # Ảnh cuối
-        last = valid_images[-1].replace("\\", "/")
+        last = os.path.relpath(valid_images[-1], os.getcwd()).replace("\\", "/")
         f.write(f"file '{last}'\n")
 
+    print("list.txt đã tạo:", os.path.exists(list_path))
+
+    # ===== Chạy FFmpeg =====
     subprocess.run([
         "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
-        "-i", "list.txt",
-        "-i", "output.mp3",
+        "-i", list_path,
+        "-i", AUDIO_PATH,
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-shortest",
-        "output_video.mp4"
-    ])
-
+        OUTPUT_PATH
+    ], check=True)
 
     print("🎉 Tạo video thành công:", OUTPUT_PATH)
-
     print("End Tạo video")
-
+    
 async def getNewPost24h():
     print("Start lấy bài viết mới")
     rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
