@@ -63,14 +63,15 @@ async def createVideo():
 
     per_image = duration / len(valid_images)
 
-    # ===== Tạo list.txt =====
     with open("list.txt", "w", encoding="utf-8") as f:
         for img in valid_images:
-            safe_path = os.path.abspath(img).replace("\\", "/")
-            f.write(f"file '{safe_path}'\n")
+            # Chỉ lấy folder + tên file, không dùng full path
+            relative_path = img.replace("\\", "/")  # đảm bảo dấu '/'
+            f.write(f"file '{relative_path}'\n")
             f.write(f"duration {per_image}\n")
 
-        last = os.path.abspath(valid_images[-1]).replace("\\", "/")
+        # Ảnh cuối
+        last = valid_images[-1].replace("\\", "/")
         f.write(f"file '{last}'\n")
 
     subprocess.run([
