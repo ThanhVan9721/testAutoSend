@@ -1,4 +1,4 @@
-from flask import Flask, send_file
+from flask import Flask, send_file, jsonify
 import requests
 import os
 from openai import OpenAI
@@ -89,7 +89,7 @@ async def createVideo():
 
     print("🎉 Tạo video thành công:", OUTPUT_PATH)
     print("End Tạo video")
-    
+
 async def getNewPost24h():
     print("Start lấy bài viết mới")
     rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
@@ -300,27 +300,30 @@ def create():
 def view():
     return send_file("output_video.mp4", mimetype="video/mp4")
 
-@app.route("/test")
-def test():
-    CWD = "CWD:", os.getcwd()
-
-    LIST = "LIST.TXT exists:", os.path.exists("list.txt")
-
-    A = ""
-    B = ""
-    C = ""
-    if os.path.exists("images"):
-        A = "images folder exists"
-        B = "images files:", os.listdir("images")
-    else:
-        C = "images folder DOES NOT exist"
-
-    return f"""<p> {CWD} </p>
-               <p>{LIST} </p>
-                <p>{A}   </p>
-               <p> {B} </p>
-               <p> {C} </p>
-            """
+@app.route("/check_list")
+def check_list():
+    # Thư mục tạo list.txt
+    cwd = os.getcwd()
+    list_path = os.path.join(cwd, "list.txt")
+    
+    # Thử tạo file test
+    try:
+        with open(list_path, "w", encoding="utf-8") as f:
+            f.write("file 'test.jpg'\n")
+            f.write("duration 1\n")
+        exists = os.path.exists(list_path)
+        files_in_cwd = os.listdir(cwd)
+        return jsonify({
+            "cwd": cwd,
+            "list_path": list_path,
+            "list_exists": exists,
+            "files_in_cwd": files_in_cwd
+        })
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "cwd": cwd
+        })
 
 
 if __name__ == "__main__":
