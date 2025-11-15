@@ -302,5 +302,28 @@ def create():
 def view():
     return send_file("output_video.mp4", mimetype="video/mp4")
 
+@app.route("/test")
+def test():
+    CWD = "CWD:", os.getcwd()
+
+    LIST = "LIST.TXT exists:", os.path.exists("list.txt")
+
+    A = ""
+    B = ""
+    C = ""
+    if os.path.exists("images"):
+        A = "images folder exists"
+        B = "images files:", os.listdir("images")
+    else:
+        C = "images folder DOES NOT exist"
+
+    return f"""<p> {CWD} </p>
+               <p>{LIST} </p>
+                <p>{A}   </p>
+               <p> {B} </p>
+               <p> {C} </p>
+            """
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
