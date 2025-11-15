@@ -15,82 +15,90 @@ import glob
 import json
 app = Flask(__name__)
 
-def ffmpeg_can_read(path):
-    cmd = ["ffmpeg", "-v", "error", "-i", path, "-f", "null", "-"]
-    r = subprocess.run(cmd, capture_output=True)
-    return r.returncode == 0
+
+def is_valid_image(path):
+    """Kiểm tra FFmpeg có đọc được file ảnh không"""
+    cmd = ["ffprobe", "-v", "error", "-show_entries", "stream=index",
+           "-of", "compact=p=0:nk=1", path]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.stdout.strip() != ""
+    except:
+        return False
+
 
 async def createVideo():
-    print("Start video")
+    print("Start Tạo video")
 
     IMAGE_FOLDER = "images"
     AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
-    MIN_DURATION = 0.10   # tối thiểu 0.1 giây
 
-    # ===== Load ảnh =====
-    exts = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]
+    # ==== Lấy list ảnh mọi định dạng ====
     images = []
-    for e in exts:
-        images += glob.glob(os.path.join(IMAGE_FOLDER, e))
+    for ext in ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]:
+        images.extend(glob.glob(os.path.join(IMAGE_FOLDER, ext)))
 
     images = sorted(images, key=os.path.getctime)
 
     if not images:
-        raise ValueError("Không có ảnh!")
+        raise ValueError("Không tìm thấy ảnh!")
 
-    # ===== Kiểm tra ảnh hỏng =====
-    valid_imgs = []
-    for img in images:
-        if ffmpeg_can_read(img):
-            valid_imgs.append(img)
-        else:
-            print("Ảnh lỗi (bỏ qua):", img)
+    # ==== Lọc ảnh hỏng ====
+    valid_images = [img for img in images if is_valid_image(img)]
+    if not valid_images:
+        raise ValueError("Không còn ảnh hợp lệ!")
 
-    if not valid_imgs:
-        raise ValueError("Không ảnh nào hợp lệ!")
-
-    # ===== Lấy độ dài âm thanh =====
+    # ==== Lấy thời lượng audio ====
     probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", AUDIO_PATH],
+        ["ffprobe", "-v", "error",
+         "-show_entries", "format=duration",
+         "-of", "json", AUDIO_PATH],
         capture_output=True, text=True
     )
+
     duration = float(json.loads(probe.stdout)["format"]["duration"])
+    per_image = duration / len(valid_images)
 
-    per_img = duration / len(valid_imgs)
+    # ==== Tạo list.txt trong thư mục cho phép ghi (/tmp) ====
+    list_path = "/tmp/list.txt"
 
-    # tránh duration nhỏ gây frame duplicate
-    if per_img < MIN_DURATION:
-        print("Duration quá nhỏ, set lại:", MIN_DURATION)
-        per_img = MIN_DURATION
+    with open(list_path, "w", encoding="utf-8") as f:
+        for img in valid_images:
+            abs_path = os.path.abspath(img).replace("\\", "/")
+            f.write(f"file '{abs_path}'\n")
+            f.write(f"duration {per_image}\n")
 
-    # ===== Tạo list.txt =====
-    with open("list.txt", "w", encoding="utf-8") as f:
-        for img in valid_imgs:
-            rel = os.path.relpath(img).replace("\\", "/")
-            f.write(f"file '{rel}'\n")
-            f.write(f"duration {per_img}\n")
-
-        last = os.path.relpath(valid_imgs[-1]).replace("\\", "/")
+        # Ảnh cuối (không duration)
+        last = os.path.abspath(valid_images[-1]).replace("\\", "/")
         f.write(f"file '{last}'\n")
 
-    print("list.txt OK")
+        f.flush()
+        os.fsync(f.fileno())
 
-    # ===== Tạo video =====
+    print("✅ list.txt OK:", list_path)
+
+    # ==== Ghép ảnh thành video + âm thanh ====
     cmd = [
         "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", "list.txt",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", list_path,
         "-i", AUDIO_PATH,
-        "-c:v", "libx264",
+        "-r", "30",
+        "-vsync", "vfr",
         "-pix_fmt", "yuv420p",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
         "-c:a", "aac",
         "-shortest",
         OUTPUT_PATH
     ]
 
     subprocess.run(cmd, check=True)
-    print("DONE:", OUTPUT_PATH)
+
+    print("🎉 Tạo video thành công:", OUTPUT_PATH)
+    print("End Tạo video")
 
 async def getNewPost24h():
     print("Start lấy bài viết mới")
