@@ -65,14 +65,13 @@ async def createVideo():
         per_img = MIN_DURATION
 
     # ===== Tạo list.txt =====
-    list_path = "list.txt"
-    with open(list_path, "w", encoding="utf-8") as f:
+    with open("list.txt", "w", encoding="utf-8") as f:
         for img in valid_imgs:
-            img_rel = img.replace("\\", "/")
-            f.write(f"file '{img_rel}'\n")
+            rel = os.path.relpath(img).replace("\\", "/")
+            f.write(f"file '{rel}'\n")
             f.write(f"duration {per_img}\n")
 
-        last = valid_imgs[-1].replace("\\", "/")
+        last = os.path.relpath(valid_imgs[-1]).replace("\\", "/")
         f.write(f"file '{last}'\n")
 
     print("list.txt OK")
@@ -81,7 +80,7 @@ async def createVideo():
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
-        "-i", list_path,
+        "-i", "list.txt",
         "-i", AUDIO_PATH,
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
