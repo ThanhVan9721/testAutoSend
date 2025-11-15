@@ -277,6 +277,10 @@ async def tts(text):
 
 @app.route("/")
 def home():
+    return "Chào Mừng"
+
+@app.route("/create")
+def create():
     content = asyncio.run(getNewPost24h())
     contentEdit = asyncio.run(editContent(content))
     asyncio.run(tts(contentEdit))
