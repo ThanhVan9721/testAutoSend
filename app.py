@@ -325,6 +325,25 @@ def check_list():
             "cwd": cwd
         })
 
+@app.route("/read_list")
+def read_list():
+    LIST_PATH = "list.txt"
+    # Kiểm tra file có tồn tại không
+    if not os.path.exists(LIST_PATH):
+        return jsonify({"error": "File list.txt không tồn tại!"})
+
+    # Đọc file
+    try:
+        with open(LIST_PATH, "r", encoding="utf-8") as f:
+            content = f.read()  # đọc toàn bộ file
+        lines = content.splitlines()  # tách thành từng dòng
+        return jsonify({
+            "list_path": os.path.abspath(LIST_PATH),
+            "lines": lines,
+            "line_count": len(lines)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
