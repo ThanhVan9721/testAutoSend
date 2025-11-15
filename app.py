@@ -73,8 +73,18 @@ async def createVideo():
         last = os.path.abspath(valid_images[-1]).replace("\\", "/")
         f.write(f"file '{last}'\n")
 
-    scriptGen = f"ffmpeg -f concat -safe 0 -i list.txt -i output.mp3 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest {OUTPUT_PATH} -y"
-    subprocess.run(scriptGen, check=True)
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", "list.txt",
+        "-i", "output.mp3",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-shortest",
+        "output_video.mp4"
+    ])
 
 
     print("🎉 Tạo video thành công:", OUTPUT_PATH)
