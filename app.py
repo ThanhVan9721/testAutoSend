@@ -15,66 +15,70 @@ import glob
 import json
 app = Flask(__name__)
 
+def is_valid_image(path):
+    """ Kiểm tra ảnh có mở được bằng FFmpeg hay không """
+    cmd = ["ffprobe", "-v", "error", "-show_entries", "stream=index",
+           "-of", "compact=p=0:nk=1", path]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.stdout.strip() != ""
+    except:
+        return False
+
 async def createVideo():
     print("Start Tạo video")
+
     IMAGE_FOLDER = "images"
     AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
 
-    # ===== Lấy danh sách ảnh =====
-    images = sorted(glob.glob(os.path.join(IMAGE_FOLDER, "*")), key=os.path.getctime)
+    # ===== Lấy ảnh mọi định dạng =====
+    images = []
+    for ext in ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]:
+        images.extend(glob.glob(os.path.join(IMAGE_FOLDER, ext)))
+
+    # ===== Sort theo thời gian =====
+    images = sorted(images, key=os.path.getctime)
+
     if not images:
-        raise ValueError("⚠️ Không tìm thấy hình ảnh nào trong thư mục images!")
+        raise ValueError("Không tìm thấy ảnh!")
+
+    # ===== Lọc ảnh lỗi =====
+    valid_images = []
+    for img in images:
+        if is_valid_image(img):
+            valid_images.append(img)
+        else:
+            print(f"⚠ Bỏ qua ảnh lỗi: {img}")
+
+    if not valid_images:
+        raise ValueError("Tất cả ảnh đều lỗi – FFmpeg không thể đọc!")
 
     # ===== Lấy độ dài âm thanh =====
-    cmd_probe = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "json", AUDIO_PATH
-    ]
-    result = subprocess.run(cmd_probe, capture_output=True, text=True, check=True)
-    duration = float(json.loads(result.stdout)["format"]["duration"])
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", AUDIO_PATH],
+        capture_output=True, text=True
+    )
+    duration = float(json.loads(probe.stdout)["format"]["duration"])
 
-    # ===== Tính thời lượng mỗi ảnh =====
-    DURATION_PER_IMAGE = duration / len(images)
-    print(f"🎵 Âm thanh dài {duration:.2f}s → mỗi ảnh {DURATION_PER_IMAGE:.2f}s")
+    per_image = duration / len(valid_images)
 
     # ===== Tạo list.txt =====
-    list_file = "list.txt"
-    with open(list_file, "w", encoding="utf-8") as f:
-        for img in images:
-            f.write(f"file '{img}'\n")
-            f.write(f"duration {DURATION_PER_IMAGE}\n")
-        f.write(f"file '{images[-1]}'\n")
+    with open("list.txt", "w", encoding="utf-8") as f:
+        for img in valid_images:
+            safe_path = os.path.abspath(img).replace("\\", "/")
+            f.write(f"file '{safe_path}'\n")
+            f.write(f"duration {per_image}\n")
 
-    # ===== Tạo video từ ảnh =====
-    temp_video = "temp_video.mp4"
-    cmd_video = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", list_file,
-        "-r", "30",
-        "-pix_fmt", "yuv420p",
-        "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2",
-        "-c:v", "libx264",
-        temp_video
-    ]
-    subprocess.run(cmd_video, check=True)
+        last = os.path.abspath(valid_images[-1]).replace("\\", "/")
+        f.write(f"file '{last}'\n")
 
-    # ===== Ghép video + âm thanh =====
-    cmd_merge = [
-        "ffmpeg", "-y",
-        "-i", temp_video,
-        "-i", AUDIO_PATH,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-shortest",
-        OUTPUT_PATH
-    ]
-    subprocess.run(cmd_merge, check=True)
+    scriptGen = f"ffmpeg -f concat -safe 0 -i list.txt -i output.mp3 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest {OUTPUT_PATH} -y"
+    subprocess.run(scriptGen, check=True)
 
-    os.remove(temp_video)
-    os.remove(list_file)
+
+    print("🎉 Tạo video thành công:", OUTPUT_PATH)
+
     print("End Tạo video")
 
 async def getNewPost24h():
