@@ -15,41 +15,40 @@ import glob
 import json
 app = Flask(__name__)
 
-def is_valid_image(path):
-    """ Kiểm tra ảnh có mở được bằng FFmpeg hay không """
-    cmd = ["ffprobe", "-v", "error", "-show_entries", "stream=index",
-           "-of", "compact=p=0:nk=1", path]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        return r.stdout.strip() != ""
-    except:
-        return False
+def ffmpeg_can_read(path):
+    cmd = ["ffmpeg", "-v", "error", "-i", path, "-f", "null", "-"]
+    r = subprocess.run(cmd, capture_output=True)
+    return r.returncode == 0
 
 async def createVideo():
-    print("Start Tạo video")
+    print("Start video")
 
     IMAGE_FOLDER = "images"
     AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
+    MIN_DURATION = 0.10   # tối thiểu 0.1 giây
 
-    # ===== Kiểm tra thư mục images tồn tại =====
-    if not os.path.exists(IMAGE_FOLDER):
-        raise ValueError(f"Thư mục {IMAGE_FOLDER} không tồn tại trên Render!")
-
-    # ===== Lấy ảnh mọi định dạng =====
+    # ===== Load ảnh =====
+    exts = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]
     images = []
-    for ext in ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp"]:
-        images.extend(glob.glob(os.path.join(IMAGE_FOLDER, ext)))
+    for e in exts:
+        images += glob.glob(os.path.join(IMAGE_FOLDER, e))
 
     images = sorted(images, key=os.path.getctime)
 
     if not images:
-        raise ValueError("Không tìm thấy ảnh!")
+        raise ValueError("Không có ảnh!")
 
-    # ===== Lọc ảnh lỗi =====
-    valid_images = [img for img in images if is_valid_image(img)]
-    if not valid_images:
-        raise ValueError("Tất cả ảnh đều lỗi – FFmpeg không thể đọc!")
+    # ===== Kiểm tra ảnh hỏng =====
+    valid_imgs = []
+    for img in images:
+        if ffmpeg_can_read(img):
+            valid_imgs.append(img)
+        else:
+            print("Ảnh lỗi (bỏ qua):", img)
+
+    if not valid_imgs:
+        raise ValueError("Không ảnh nào hợp lệ!")
 
     # ===== Lấy độ dài âm thanh =====
     probe = subprocess.run(
@@ -57,27 +56,31 @@ async def createVideo():
         capture_output=True, text=True
     )
     duration = float(json.loads(probe.stdout)["format"]["duration"])
-    per_image = duration / len(valid_images)
 
-    # ===== Tạo list.txt đúng thư mục CWD =====
-    list_path = os.path.join(os.getcwd(), "list.txt")
+    per_img = duration / len(valid_imgs)
+
+    # tránh duration nhỏ gây frame duplicate
+    if per_img < MIN_DURATION:
+        print("Duration quá nhỏ, set lại:", MIN_DURATION)
+        per_img = MIN_DURATION
+
+    # ===== Tạo list.txt =====
+    list_path = "list.txt"
     with open(list_path, "w", encoding="utf-8") as f:
-        for img in valid_images:
-            # Chỉ lấy đường dẫn tương đối từ CWD
-            rel_path = os.path.relpath(img, os.getcwd()).replace("\\", "/")
-            f.write(f"file '{rel_path}'\n")
-            f.write(f"duration {per_image}\n")
-        # Ảnh cuối
-        last = os.path.relpath(valid_images[-1], os.getcwd()).replace("\\", "/")
+        for img in valid_imgs:
+            img_rel = img.replace("\\", "/")
+            f.write(f"file '{img_rel}'\n")
+            f.write(f"duration {per_img}\n")
+
+        last = valid_imgs[-1].replace("\\", "/")
         f.write(f"file '{last}'\n")
 
-    print("list.txt đã tạo:", os.path.exists(list_path))
+    print("list.txt OK")
 
-    # ===== Chạy FFmpeg =====
-    subprocess.run([
+    # ===== Tạo video =====
+    cmd = [
         "ffmpeg", "-y",
-        "-f", "concat",
-        "-safe", "0",
+        "-f", "concat", "-safe", "0",
         "-i", list_path,
         "-i", AUDIO_PATH,
         "-c:v", "libx264",
@@ -85,10 +88,10 @@ async def createVideo():
         "-c:a", "aac",
         "-shortest",
         OUTPUT_PATH
-    ], check=True)
+    ]
 
-    print("🎉 Tạo video thành công:", OUTPUT_PATH)
-    print("End Tạo video")
+    subprocess.run(cmd, check=True)
+    print("DONE:", OUTPUT_PATH)
 
 async def getNewPost24h():
     print("Start lấy bài viết mới")
