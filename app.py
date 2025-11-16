@@ -30,7 +30,7 @@ def is_valid_image(path):
 async def createVideo():
     print("Start Tạo video")
 
-    IMAGE_FOLDER = "images"
+    IMAGE_FOLDER = "/tmp/images"
     AUDIO_PATH = "output.mp3"
     OUTPUT_PATH = "output_video.mp4"
 
@@ -111,7 +111,7 @@ async def getNewPost24h():
     print("Start lấy bài viết mới")
     rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
     google_script_url = 'https://script.google.com/macros/s/AKfycbzpFYZwnJXnOSkoimpjUJzSuz3xH88Tfn9t9-BNjvfb4H1SXQ8XzfLjgr0dWFHoe8Zt/exec'
-    save_folder = "images"
+    save_folder = "/tmp/images"
 
     if os.path.exists(save_folder):
         shutil.rmtree(save_folder)
@@ -119,7 +119,7 @@ async def getNewPost24h():
     os.makedirs(save_folder)
 
     # --- Hàm tải ảnh ---
-    def download_image(url, prefix="img", width=1080, height=1920, save_folder="images"):
+    def download_image(url, prefix="img", width=1080, height=1920, save_folder="/tmp/images"):
         try:
             if not url or not url.startswith("http"):
                 return None
