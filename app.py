@@ -46,6 +46,7 @@ async def createVideo():
 
     # ==== Lọc ảnh hỏng ====
     valid_images = [img for img in images if is_valid_image(img)]
+    print(valid_images)
     if not valid_images:
         raise ValueError("Không còn ảnh hợp lệ!")
 
@@ -95,7 +96,21 @@ async def createVideo():
         OUTPUT_PATH
     ]
 
-    subprocess.run(cmd, check=True)
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", list_path,
+        "-i", AUDIO_PATH,
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        OUTPUT_PATH
+
+    ]
+
+    subprocess.run(ffmpeg_cmd, check=True)
 
     try:
         if os.path.exists(list_path):
