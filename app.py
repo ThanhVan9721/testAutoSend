@@ -97,7 +97,7 @@ async def createVideo():
     ]
 
     ffmpeg_cmd = [
-        "ffmpeg",
+        "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
         "-i", list_path,
@@ -146,7 +146,10 @@ async def getNewPost24h():
             filepath = os.path.join(save_folder, filename)
             if os.path.exists(filepath):
                 return filepath
-            response = requests.get(url, timeout=10)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+            response = requests.get(url, headers=headers, timeout=30)
             if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
