@@ -97,6 +97,13 @@ async def createVideo():
 
     subprocess.run(cmd, check=True)
 
+    try:
+        if os.path.exists(list_path):
+            os.remove(list_path)
+            print("Đã xoá file tạm:", list_path)
+    except Exception as e:
+        print("Không thể xoá file tạm:", e)
+
     print("🎉 Tạo video thành công:", OUTPUT_PATH)
     print("End Tạo video")
 
