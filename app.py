@@ -124,7 +124,7 @@ async def createVideo():
 
 async def getNewPost24h():
     print("Start lấy bài viết mới")
-    rss_url = "https://cdn.24h.com.vn/upload/rss/anninhhinhsu.rss"
+    rss_url = "https://cdn.24h.com.vn/upload/rss/trangchu24h.rss"
     google_script_url = 'https://script.google.com/macros/s/AKfycbzpFYZwnJXnOSkoimpjUJzSuz3xH88Tfn9t9-BNjvfb4H1SXQ8XzfLjgr0dWFHoe8Zt/exec'
     save_folder = "/tmp/images"
 
@@ -153,7 +153,7 @@ async def getNewPost24h():
             if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
-            img_bytes = io.BytesIO(response.content)
+            img_bytes = io.BytesIO(response.content)    
             codec = "mjpeg" if ext in [".jpg", ".jpeg"] else ext.replace(".", "")
             cmd = [
                 "ffmpeg", "-y", "-f", "image2pipe", "-vcodec", codec, "-i", "pipe:0",
