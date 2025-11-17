@@ -252,7 +252,7 @@ async def editContent(content):
     print("Start edit nội dung bài viết")
     client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key="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",
+    api_key="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",
     )
     completion = client.chat.completions.create(
     extra_headers={
