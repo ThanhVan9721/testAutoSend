@@ -106,7 +106,21 @@ async def createVideo():
 
     ]
 
-    subprocess.run(ffmpeg_cmd, check=True)
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", list_path,
+        "-i", AUDIO_PATH,
+        "-vsync", "passthrough",   # quan trọng
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-shortest",
+        OUTPUT_PATH
+    ], check=True)
+
+    # subprocess.run(ffmpeg_cmd, check=True)
 
     try:
         if os.path.exists(list_path):
