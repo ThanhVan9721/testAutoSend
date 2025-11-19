@@ -70,10 +70,6 @@ async def createVideo():
             f.write(f"file '{abs_path}'\n")
             f.write(f"duration {per_image}\n")
 
-        # Ảnh cuối (không duration)
-        last = os.path.abspath(valid_images[-1]).replace("\\", "/")
-        f.write(f"file '{last}'\n")
-
         f.flush()
         os.fsync(f.fileno())
 
