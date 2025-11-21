@@ -4,3 +4,4 @@ openai>=1.12.0
 feedparser>=6.0.10
 edge-tts==7.0.0
 bs4
+cloudscraper
