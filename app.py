@@ -13,6 +13,9 @@ import subprocess
 import io
 import glob
 import json
+import cloudscraper
+# Tạo scraper
+scraper = cloudscraper.create_scraper(browser="chrome")
 app = Flask(__name__)
 
 
@@ -159,14 +162,13 @@ async def getNewPost24h():
             filepath = os.path.join(save_folder, filename)
             if os.path.exists(filepath):
                 return filepath
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-            }
-            response = requests.get(url, headers=headers, timeout=30)
+            
+            response = scraper.get(url, timeout=30)
             if response.status_code != 200:
                 print(f"⚠️ Lỗi tải ảnh: {url}")
                 return None
-            img_bytes = io.BytesIO(response.content)    
+            img_bytes = io.BytesIO(response.content)   
+
             codec = "mjpeg" if ext in [".jpg", ".jpeg"] else ext.replace(".", "")
             cmd = [
                 "ffmpeg", "-y", "-f", "image2pipe", "-vcodec", codec, "-i", "pipe:0",
@@ -185,7 +187,7 @@ async def getNewPost24h():
         return None
 
     # --- Lấy dữ liệu Google Sheet ---
-    r = requests.get(google_script_url)
+    r = scraper.get(google_script_url)
     try:
         dataInFiles = r.json()
         if not isinstance(dataInFiles, list):
@@ -216,7 +218,8 @@ async def getNewPost24h():
                 image_url = match.group(1)
 
         try:
-            response = requests.get(link, timeout=10)
+            print(link)
+            response = scraper.get(link)
             response.encoding = "utf-8"
             soup = BeautifulSoup(response.text, "html.parser")
             article_tag = soup.find("article")
